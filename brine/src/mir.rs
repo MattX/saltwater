@@ -16,46 +16,77 @@
 //! Describes a purely-functional language higher-level than Relambda, serving as an intermediate
 //! compilation step.
 
+use saltwater_parser::InternedStr;
+
 #[derive(Debug, Clone)]
 pub enum MirExpr {
-    Let(Vec<(String, MirExpr)>),
+    LetCC(Box<LetCC>),
+    Let(Box<Let>),
     Lambda(Box<Lambda>),
     If(Box<If>),
     Apply(Box<Apply>),
     PurePrimitive(Box<PurePrim>),
     StatePrimitive(Box<StatePrim>),
     Literal(Box<MirLiteral>),
+    Ref(InternedStr),
+    Do(Vec<MirExpr>),
 }
 
 impl MirExpr {
+    pub fn apply(func: MirExpr, arg: MirExpr) -> MirExpr {
+        MirExpr::Apply(Box::new(Apply { func, arg }))
+    }
+
     pub fn literal(ml: MirLiteral) -> MirExpr {
         MirExpr::Literal(Box::new(ml))
+    }
+
+    pub fn let_cc(ident: InternedStr, body: MirExpr) -> MirExpr {
+        MirExpr::LetCC(Box::new(LetCC { ident, body }))
+    }
+
+    pub fn state_primitive(sp: StatePrim) -> MirExpr {
+        MirExpr::StatePrimitive(Box::new(sp))
+    }
+
+    pub fn if_(condition: MirExpr, consequent: MirExpr, alternative: MirExpr) -> MirExpr {
+        MirExpr::If(Box::new(If {
+            condition,
+            consequent,
+            alternative,
+        }))
+    }
+
+    pub fn nop() -> MirExpr {
+        MirExpr::apply(
+            MirExpr::state_primitive(StatePrim::Pure),
+            MirExpr::literal(MirLiteral::Null),
+        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum PurePrim {
-    Plus(MirExpr, MirExpr),
-    Minus(MirExpr, MirExpr),
-    Times(MirExpr, MirExpr),
-    Div(MirExpr, MirExpr),
-    Mod(MirExpr, MirExpr),
-    Neg(MirExpr),
-    And(MirExpr, MirExpr),
-    Or(MirExpr, MirExpr),
-    Cons(MirExpr, MirExpr),
-    Car(MirExpr),
-    Cdr(MirExpr),
-    IntToBool(MirExpr),
-    BoolToInt(MirExpr),
+    Plus,
+    Minus,
+    Times,
+    Div,
+    Mod,
+    Neg,
+    And,
+    Or,
+    Cons,
+    Car,
+    Cdr,
+    IntToBool,
+    BoolToInt,
 }
 
 #[derive(Debug, Clone)]
 pub enum StatePrim {
-    Push(Vec<(String, MirExpr)>),
-    Pop(Vec<String>),
-    Get(String, MirExpr),
-    Put(String, MirExpr),
+    Get(InternedStr),
+    Set(InternedStr),
+    Pure,
 }
 
 #[derive(Debug, Clone)]
@@ -66,8 +97,20 @@ pub enum MirLiteral {
 }
 
 #[derive(Debug, Clone)]
+pub struct Let {
+    pub bindings: Vec<(InternedStr, MirExpr)>,
+    pub body: MirExpr,
+}
+
+#[derive(Debug, Clone)]
+pub struct LetCC {
+    pub ident: InternedStr,
+    pub body: MirExpr,
+}
+
+#[derive(Debug, Clone)]
 pub struct Lambda {
-    pub arg: String,
+    pub arg: InternedStr,
     pub body: MirExpr,
 }
 

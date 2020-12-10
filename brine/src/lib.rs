@@ -1,16 +1,22 @@
+#[macro_use]
+extern crate lazy_static;
+
 mod ast;
-mod stmt;
 mod expr;
 mod mir;
+mod stmt;
 
-use saltwater_parser::{Opt, Program, StorageClass, Type, InternedStr, ErrorHandler, CompileResult, Location, CompileError, Locatable};
-use saltwater_parser::hir::{Initializer, Symbol, Declaration, Stmt};
+use crate::ast::SyntaxNode;
+use crate::mir::{LetCC, MirExpr};
 use saltwater_parser::get_str;
+use saltwater_parser::hir::{Declaration, Initializer, Stmt, Symbol};
+use saltwater_parser::types::FunctionType;
+use saltwater_parser::{
+    CompileError, CompileResult, ErrorHandler, InternedStr, Locatable, Location, Opt, Program,
+    StorageClass, Type,
+};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use saltwater_parser::types::FunctionType;
-use crate::ast::SyntaxNode;
-use crate::mir::MirExpr;
 
 /// Compile and return the declarations and warnings.
 pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
@@ -39,7 +45,8 @@ pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
         let current = match &meta.ctype {
             Type::Function(func_type) => match decl.data.init {
                 Some(Initializer::FunctionBody(stmts)) => {
-                    match compiler.compile_func(decl.data.symbol, &func_type, stmts, decl.location) {
+                    match compiler.compile_func(decl.data.symbol, &func_type, stmts, decl.location)
+                    {
                         Ok(expr) => {
                             func_code.insert(decl.data.symbol.get().id, expr);
                             Ok(())
@@ -66,7 +73,9 @@ pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
     let result = if let Some(err) = err {
         Err(err)
     } else {
-        Ok(func_code.remove(&InternedStr::get_or_intern("main")).unwrap())
+        Ok(func_code
+            .remove(&InternedStr::get_or_intern("main"))
+            .unwrap())
     };
     Program {
         result: result.map_err(|errs| vec_deque![errs]),
@@ -75,13 +84,27 @@ pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
     }
 }
 
-struct Compiler {}
+#[derive(Default)]
+struct Compiler {
+    pub locals: Vec<Vec<InternedStr>>,
+    pub gensym_counter: usize,
+}
 
 pub type MirResult = CompileResult<MirExpr>;
 
+lazy_static! {
+    pub static ref RETURN_CONT: InternedStr = InternedStr::get_or_intern("__return_cont");
+}
+
 impl Compiler {
-    fn new() -> Compiler {
-        Compiler {}
+    pub fn new() -> Compiler {
+        Compiler::default()
+    }
+
+    pub fn gensym(&mut self, prefix: &str) -> InternedStr {
+        let i = self.gensym_counter;
+        self.gensym_counter += 1;
+        InternedStr::get_or_intern(format!("__{}_{}", prefix, i))
     }
 
     fn compile_func(
@@ -91,9 +114,7 @@ impl Compiler {
         stmts: Vec<Stmt>,
         location: Location,
     ) -> MirResult {
-        if stmts.len() != 1 {
-            todo!("Support more than one statement")
-        }
-        self.compile_stmt(stmts.into_iter().next().unwrap())
+        self.compile_all(stmts)
+            .map(|res| MirExpr::let_cc(*RETURN_CONT, res))
     }
 }

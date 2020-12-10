@@ -92,7 +92,10 @@ impl SyntaxNode {
                 let (arg_repr, arg_br) = a.arg.do_output(indent + 1, max_width);
                 let total_len = 1 + func_repr.chars().count() + arg_repr.chars().count();
                 if func_br || arg_br || indent + total_len > max_width {
-                    (format!("`{}\n{}{}", func_repr, " ".repeat(indent + 1), arg_repr), true)
+                    (
+                        format!("`{}\n{}{}", func_repr, " ".repeat(indent + 1), arg_repr),
+                        true,
+                    )
                 } else {
                     (format!("`{}{}", func_repr, arg_repr), false)
                 }

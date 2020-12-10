@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
+use crate::mir::{MirExpr, MirLiteral, StatePrim};
 use crate::{Compiler, MirResult};
 use saltwater_parser::hir::{Expr, ExprType};
-use saltwater_parser::{Type, LiteralValue, Location, CompileResult};
-use crate::mir::{MirExpr, MirLiteral};
+use saltwater_parser::{CompileResult, LiteralValue, Location, Type};
 
 type ExprResult = CompileResult<Value>;
 
@@ -29,27 +28,25 @@ impl Compiler {
     pub fn compile_expr(&mut self, expr: Expr) -> ExprResult {
         let expr = expr.const_fold()?;
         match expr.expr {
-            ExprType::Literal(token) => {
-                self.compile_literal(expr.ctype, token)
+            ExprType::Literal(token) => self.compile_literal(expr.ctype, token),
+            ExprType::Id(var) => {
+                let md = var.get();
+                Ok(Value {
+                    val: MirExpr::state_primitive(StatePrim::Get(md.id)),
+                    ctype: md.ctype.clone(),
+                })
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
-    fn compile_literal(
-        &mut self,
-        ctype: Type,
-        token: LiteralValue,
-    ) -> ExprResult {
+    fn compile_literal(&mut self, ctype: Type, token: LiteralValue) -> ExprResult {
         let val = match (token, &ctype) {
             (LiteralValue::Int(i), Type::Bool) => MirExpr::literal(MirLiteral::Bool(i != 0)),
             (LiteralValue::Int(i), _) => MirExpr::literal(MirLiteral::Int(i)),
             (LiteralValue::Char(i), _) => MirExpr::literal(MirLiteral::Int(i64::from(i))),
             _ => unimplemented!("only ints and bools are supported"),
         };
-        Ok(Value {
-            val,
-            ctype,
-        })
+        Ok(Value { val, ctype })
     }
 }

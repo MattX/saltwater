@@ -160,23 +160,16 @@ fn real_main(buf: ArcStr, bin_opt: BinOpt, output: &Path) -> Result<(), (Error, 
 
 #[inline]
 fn aot_main(buf: &str, opt: Opt, output: &Path, color: ColorChoice) -> Result<(), (Error, Files)> {
-    let no_link = opt.no_link;
-    let module = saltwater_codegen::initialize_aot_module("saltwater_main".to_owned());
     let Program {
         result,
         warnings,
         files,
-    } = compile(module, buf, opt);
+    } = brine::compile(buf, opt);
     handle_warnings(warnings, &files, color);
 
-    let product = sw_try!(result.map(|x| x.finish()), files);
-    if no_link {
-        sw_try!(assemble(product, output), files);
-        return Ok(());
-    }
-    let tmp_file = sw_try!(NamedTempFile::new(), files);
-    sw_try!(assemble(product, tmp_file.as_ref()), files);
-    sw_try!(link(tmp_file.as_ref(), output), files);
+    let product = sw_try!(result, files);
+    println!("{:?}", product);
+
     Ok(())
 }
 
