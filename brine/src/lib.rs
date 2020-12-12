@@ -2,8 +2,10 @@
 extern crate lazy_static;
 
 mod ast;
+mod cfg;
 mod expr;
 mod mir;
+mod miri;
 mod stmt;
 
 use crate::ast::SyntaxNode;
@@ -22,7 +24,7 @@ use std::convert::TryFrom;
 pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
     use saltwater_parser::{check_semantics, vec_deque};
 
-    let mut program = check_semantics(buf, opt);
+    let program = check_semantics(buf, opt);
     let hir = match program.result {
         Ok(hir) => hir,
         Err(err) => {
@@ -114,7 +116,7 @@ impl Compiler {
         stmts: Vec<Stmt>,
         location: Location,
     ) -> MirResult {
-        self.compile_all(stmts)
-            .map(|res| MirExpr::let_cc(*RETURN_CONT, res))
+        self.compile_all(stmts);
+        todo!()
     }
 }

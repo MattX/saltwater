@@ -47,7 +47,7 @@ impl Compiler {
                     Ok(retval)
                 } else {
                     Ok(MirExpr::apply(
-                        MirExpr::state_primitive(StatePrim::Get(*RETURN_CONT)),
+                        MirExpr::StatePrim(StatePrim::Get(*RETURN_CONT)),
                         retval,
                     ))
                 }

@@ -20,13 +20,12 @@ use saltwater_parser::InternedStr;
 
 #[derive(Debug, Clone)]
 pub enum MirExpr {
-    LetCC(Box<LetCC>),
     Let(Box<Let>),
     Lambda(Box<Lambda>),
     If(Box<If>),
     Apply(Box<Apply>),
-    PurePrimitive(Box<PurePrim>),
-    StatePrimitive(Box<StatePrim>),
+    PurePrim(PurePrim),
+    StatePrim(StatePrim),
     Literal(Box<MirLiteral>),
     Ref(InternedStr),
     Do(Vec<MirExpr>),
@@ -41,14 +40,6 @@ impl MirExpr {
         MirExpr::Literal(Box::new(ml))
     }
 
-    pub fn let_cc(ident: InternedStr, body: MirExpr) -> MirExpr {
-        MirExpr::LetCC(Box::new(LetCC { ident, body }))
-    }
-
-    pub fn state_primitive(sp: StatePrim) -> MirExpr {
-        MirExpr::StatePrimitive(Box::new(sp))
-    }
-
     pub fn if_(condition: MirExpr, consequent: MirExpr, alternative: MirExpr) -> MirExpr {
         MirExpr::If(Box::new(If {
             condition,
@@ -57,15 +48,36 @@ impl MirExpr {
         }))
     }
 
+    pub fn lambda(arg: InternedStr, body: MirExpr) -> MirExpr {
+        MirExpr::Lambda(Box::new(Lambda { arg, body }))
+    }
+
     pub fn nop() -> MirExpr {
         MirExpr::apply(
-            MirExpr::state_primitive(StatePrim::Pure),
+            MirExpr::StatePrim(StatePrim::Pure),
             MirExpr::literal(MirLiteral::Null),
         )
     }
+
+    /// Desugar MIR
+    ///  - Do into sequenced then
+    ///  - Let into lambda
+    pub fn desugar(&self) -> MirExpr {
+        match self {
+            MirExpr::Let(let_) => {
+                let Let { ident, value, body } = &**let_;
+                MirExpr::apply(
+                    MirExpr::lambda(ident.clone(), body.desugar()),
+                    value.desugar(),
+                )
+            }
+            MirExpr::Do(_) => todo!(),
+            _ => self.clone(),
+        }
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum PurePrim {
     Plus,
     Minus,
@@ -82,7 +94,7 @@ pub enum PurePrim {
     BoolToInt,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum StatePrim {
     Get(InternedStr),
     Set(InternedStr),
@@ -98,7 +110,8 @@ pub enum MirLiteral {
 
 #[derive(Debug, Clone)]
 pub struct Let {
-    pub bindings: Vec<(InternedStr, MirExpr)>,
+    pub ident: InternedStr,
+    pub value: MirExpr,
     pub body: MirExpr,
 }
 

@@ -14,6 +14,8 @@
 
 // TODO refactor this to reuse relambda AST features?
 
+#![allow(dead_code)]
+
 use std::fmt::Formatter;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
