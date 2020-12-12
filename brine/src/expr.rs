@@ -32,7 +32,7 @@ impl Compiler {
             ExprType::Id(var) => {
                 let md = var.get();
                 Ok(Value {
-                    val: MirExpr::StatePrim(StatePrim::Get(md.id)),
+                    val: MirExpr::StatePrim(StatePrim::Get(md.id.into())),
                     ctype: md.ctype.clone(),
                 })
             }

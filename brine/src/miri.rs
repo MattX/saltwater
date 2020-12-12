@@ -14,7 +14,7 @@
 
 //! ## Miri -- an explicit-CPS interpreter for MIR
 
-use crate::mir::{Apply, If, MirExpr, MirLiteral, PurePrim, StatePrim};
+use crate::mir::{Apply, If, MirExpr, MirLiteral, PurePrim, StatePrim, MirInternedStr};
 use saltwater_parser::InternedStr;
 use std::rc::Rc;
 
@@ -33,7 +33,7 @@ pub enum MirObj {
 #[derive(Debug, Clone)]
 pub struct Lambda {
     env: RcEnv,
-    arg: InternedStr,
+    arg: MirInternedStr,
     body: MirExpr,
 }
 
@@ -61,14 +61,14 @@ enum Continuation<'a> {
 #[derive(Debug, Clone, Default)]
 struct Environment {
     parent: Option<RcEnv>,
-    bindings: Vec<(InternedStr, Rc<MirObj>)>,
+    bindings: Vec<(MirInternedStr, Rc<MirObj>)>,
 }
 
 #[derive(Debug, Clone)]
 struct RcEnv(Rc<Environment>);
 
 impl RcEnv {
-    fn find_value(&self, name: InternedStr) -> Option<Rc<MirObj>> {
+    fn find_value(&self, name: MirInternedStr) -> Option<Rc<MirObj>> {
         if let Some(b) = self.0.bindings.iter().find(|b| b.0 == name) {
             Some(b.1.clone())
         } else if let Some(p) = &self.0.parent {
@@ -78,7 +78,7 @@ impl RcEnv {
         }
     }
 
-    fn with_value(&self, name: InternedStr, value: Rc<MirObj>) -> RcEnv {
+    fn with_value(&self, name: MirInternedStr, value: Rc<MirObj>) -> RcEnv {
         RcEnv(Rc::new(Environment {
             parent: Some(RcEnv(self.0.clone())),
             bindings: vec![(name, value)],

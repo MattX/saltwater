@@ -9,7 +9,7 @@ mod miri;
 mod stmt;
 
 use crate::ast::SyntaxNode;
-use crate::mir::{LetCC, MirExpr};
+use crate::mir::{MirExpr, MirInternedStr};
 use saltwater_parser::get_str;
 use saltwater_parser::hir::{Declaration, Initializer, Stmt, Symbol};
 use saltwater_parser::types::FunctionType;
@@ -95,7 +95,7 @@ struct Compiler {
 pub type MirResult = CompileResult<MirExpr>;
 
 lazy_static! {
-    pub static ref RETURN_CONT: InternedStr = InternedStr::get_or_intern("__return_cont");
+    pub static ref RETURN_CONT: MirInternedStr = MirInternedStr::get_or_intern("__return_cont");
 }
 
 impl Compiler {
@@ -103,10 +103,10 @@ impl Compiler {
         Compiler::default()
     }
 
-    pub fn gensym(&mut self, prefix: &str) -> InternedStr {
+    pub fn gensym(&mut self, prefix: &str) -> MirInternedStr {
         let i = self.gensym_counter;
         self.gensym_counter += 1;
-        InternedStr::get_or_intern(format!("__{}_{}", prefix, i))
+        MirInternedStr::get_or_intern(format!("__{}_{}", prefix, i))
     }
 
     fn compile_func(
