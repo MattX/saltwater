@@ -4,8 +4,8 @@ extern crate lazy_static;
 mod ast;
 mod cfg;
 mod expr;
-mod mir;
-mod miri;
+pub mod mir;
+pub mod miri;
 mod stmt;
 
 use crate::ast::SyntaxNode;
