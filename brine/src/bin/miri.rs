@@ -1,9 +1,9 @@
 extern crate brine;
 
-use serde_lexpr::{from_str, to_string};
-use std::io::BufRead;
 use brine::mir::MirExpr;
 use brine::miri::run;
+use serde_lexpr::{from_str, to_string};
+use std::io::BufRead;
 
 fn main() {
     let stdin = std::io::stdin();

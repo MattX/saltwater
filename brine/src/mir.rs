@@ -18,9 +18,9 @@
 
 use saltwater_parser::get_str;
 use saltwater_parser::InternedStr;
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::de::Visitor;
 use serde::export::Formatter;
-use serde::de::{Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -148,7 +148,6 @@ pub struct Apply {
     pub arg: MirExpr,
 }
 
-
 /// This structure exists solely to implement Serialize and Deserialize
 /// on [`InternedStr`](saltwater_parser::InternedStr).
 ///
@@ -194,13 +193,19 @@ impl From<InternedStr> for MirInternedStr {
 }
 
 impl Serialize for MirInternedStr {
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    where
+        S: Serializer,
+    {
         serializer.serialize_str(get_str!(self.0))
     }
 }
 
 impl<'de> Deserialize<'de> for MirInternedStr {
-    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error> where D: Deserializer<'de> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
         struct MirInternedStrVisitor;
 
         impl<'v> serde::de::Visitor<'v> for MirInternedStrVisitor {
@@ -210,13 +215,16 @@ impl<'de> Deserialize<'de> for MirInternedStr {
                 formatter.write_str("a string")
             }
 
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: serde::de::Error {
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
                 Ok(MirInternedStr::get_or_intern(v))
             }
 
             fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-                where
-                    E: serde::de::Error,
+            where
+                E: serde::de::Error,
             {
                 Ok(MirInternedStr::get_or_intern(v))
             }

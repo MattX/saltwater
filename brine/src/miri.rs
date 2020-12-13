@@ -14,7 +14,7 @@
 
 //! ## Miri -- an explicit-CPS interpreter for MIR
 
-use crate::mir::{Apply, If, MirExpr, MirLiteral, Primitive, MirInternedStr};
+use crate::mir::{Apply, If, MirExpr, MirInternedStr, MirLiteral, Primitive};
 use saltwater_parser::InternedStr;
 use std::rc::Rc;
 
@@ -39,7 +39,7 @@ pub struct Lambda<'a> {
 #[derive(Debug, Clone)]
 pub struct CurriedPrimitive<'a> {
     primitive: Primitive,
-    args: Vec<Rc<Obj<'a>>>
+    args: Vec<Rc<Obj<'a>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -128,16 +128,17 @@ pub fn run(expr: &MirExpr) -> Result<Obj, String> {
                     environment,
                 });
             }
-            Continuation::Apply { func, environment } => {
-                match &*func.clone() {
-                    Obj::Lambda(l) => {
-                        let new_env = environment.with_value(l.arg, value.clone());
-                        stack.push(Continuation::Eval { expr: l.body, environment: new_env })
-                    }
-                    Obj::CurriedPrimitive(p) => value = apply_primitive(p, value)?,
-                    _ => return Err(format!("cannot apply {:?}", func))
+            Continuation::Apply { func, environment } => match &*func.clone() {
+                Obj::Lambda(l) => {
+                    let new_env = environment.with_value(l.arg, value.clone());
+                    stack.push(Continuation::Eval {
+                        expr: l.body,
+                        environment: new_env,
+                    })
                 }
-            }
+                Obj::CurriedPrimitive(p) => value = apply_primitive(p, value)?,
+                _ => return Err(format!("cannot apply {:?}", func)),
+            },
         }
     }
     Ok(Rc::try_unwrap(value).unwrap())
@@ -184,7 +185,12 @@ fn eval<'a, 'b>(
                 environment,
             });
         }
-        MirExpr::Primitive(sp) => *value = Rc::new(Obj::CurriedPrimitive(CurriedPrimitive { primitive: *sp, args: vec![] })),
+        MirExpr::Primitive(sp) => {
+            *value = Rc::new(Obj::CurriedPrimitive(CurriedPrimitive {
+                primitive: *sp,
+                args: vec![],
+            }))
+        }
         MirExpr::Literal(l) => {
             *value = Rc::new(match &**l {
                 MirLiteral::Bool(b) => Obj::Bool(*b),
@@ -203,7 +209,6 @@ fn eval<'a, 'b>(
     }
     Ok(())
 }
-
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum ObjType {
@@ -252,7 +257,10 @@ fn get_pair<'a, 'b>(obj: &'a Obj<'b>) -> (Rc<Obj<'b>>, Rc<Obj<'b>>) {
     }
 }
 
-fn apply_primitive<'a>(prim: &CurriedPrimitive<'a>, arg: Rc<Obj<'a>>) -> Result<Rc<Obj<'a>>, String> {
+fn apply_primitive<'a>(
+    prim: &CurriedPrimitive<'a>,
+    arg: Rc<Obj<'a>>,
+) -> Result<Rc<Obj<'a>>, String> {
     let expected_args = match prim.primitive {
         Primitive::Plus => &[ObjType::Int, ObjType::Int][..],
         Primitive::Minus => &[ObjType::Int, ObjType::Int][..],
@@ -278,7 +286,10 @@ fn apply_primitive<'a>(prim: &CurriedPrimitive<'a>, arg: Rc<Obj<'a>>) -> Result<
     let arg_pos = prim.args.len();
     let expected_type = expected_args[arg_pos];
     if !expected_type.check_type(&*arg) {
-        return Err(format!("primitive {:?}: expected type {:?}, but got {:?}", prim.primitive, expected_type, &arg));
+        return Err(format!(
+            "primitive {:?}: expected type {:?}, but got {:?}",
+            prim.primitive, expected_type, &arg
+        ));
     }
     args.push(arg);
     if args.len() < expected_args.len() {
