@@ -29,8 +29,7 @@ pub enum MirExpr {
     Lambda(Box<Lambda>),
     If(Box<If>),
     Apply(Box<Apply>),
-    PurePrim(PurePrim),
-    StatePrim(StatePrim),
+    Primitive(Primitive),
     Literal(Box<MirLiteral>),
     Ref(MirInternedStr),
     Do(Vec<MirExpr>),
@@ -59,7 +58,7 @@ impl MirExpr {
 
     pub fn nop() -> MirExpr {
         MirExpr::apply(
-            MirExpr::StatePrim(StatePrim::Pure),
+            MirExpr::Primitive(Primitive::Pure),
             MirExpr::literal(MirLiteral::Null),
         )
     }
@@ -67,6 +66,7 @@ impl MirExpr {
     /// Desugar MIR
     ///  - Do into sequenced then
     ///  - Let into lambda
+    ///  - Low-level primitives into higher-level primitives
     pub fn desugar(&self) -> MirExpr {
         match self {
             MirExpr::Let(let_) => {
@@ -84,7 +84,7 @@ impl MirExpr {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum PurePrim {
+pub enum Primitive {
     Plus,
     Minus,
     Times,
@@ -93,16 +93,18 @@ pub enum PurePrim {
     Neg,
     And,
     Or,
+    Xor,
     Cons,
     Car,
     Cdr,
-    IntToBool,
+    Eq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
     BoolToInt,
-}
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum StatePrim {
+    // Higher level primitives -- get rewritten during desugaring
     Get(MirInternedStr),
     Set(MirInternedStr),
     Pure,

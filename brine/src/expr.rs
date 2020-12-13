@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::mir::{MirExpr, MirLiteral, StatePrim};
+use crate::mir::{MirExpr, MirLiteral, Primitive};
 use crate::{Compiler, MirResult};
 use saltwater_parser::hir::{Expr, ExprType};
 use saltwater_parser::{CompileResult, LiteralValue, Location, Type};
@@ -32,7 +32,7 @@ impl Compiler {
             ExprType::Id(var) => {
                 let md = var.get();
                 Ok(Value {
-                    val: MirExpr::StatePrim(StatePrim::Get(md.id.into())),
+                    val: MirExpr::Primitive(Primitive::Get(md.id.into())),
                     ctype: md.ctype.clone(),
                 })
             }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::ast::SyntaxNode;
-use crate::mir::{MirExpr, MirLiteral, StatePrim};
+use crate::mir::{MirExpr, MirLiteral, Primitive};
 use crate::RETURN_CONT;
 use crate::{Compiler, MirResult};
 use saltwater_parser::data::hir::StmtType;
@@ -47,7 +47,7 @@ impl Compiler {
                     Ok(retval)
                 } else {
                     Ok(MirExpr::apply(
-                        MirExpr::StatePrim(StatePrim::Get(*RETURN_CONT)),
+                        MirExpr::Primitive(Primitive::Get(*RETURN_CONT)),
                         retval,
                     ))
                 }
