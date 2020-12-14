@@ -14,47 +14,45 @@
 
 use crate::ast::SyntaxNode;
 use crate::mir::{MirExpr, MirLiteral, Primitive};
-use crate::RETURN_CONT;
+use crate::{RETURN_CONT, create_res_lambda};
 use crate::{Compiler, MirResult};
 use saltwater_parser::data::hir::StmtType;
 use saltwater_parser::hir::{Expr, Stmt};
 use saltwater_parser::CompileResult;
+use crate::cfg::{Jump, DoLine};
 
 impl Compiler {
-    pub fn compile_all(&mut self, stmts: Vec<Stmt>) -> MirResult {
-        let mut exprs = Vec::new();
-        let stmt_count = stmts.len();
-        for (i_stmt, stmt) in stmts.into_iter().enumerate() {
-            let last = i_stmt == stmt_count - 1;
-            exprs.push(self.compile_stmt(stmt, last)?);
+    pub fn compile_all(&mut self, stmts: Vec<Stmt>) -> CompileResult<()> {
+        for stmt in stmts {
+            if let Some(e) = self.compile_stmt(stmt)? {
+                self.cfg.add_instr(create_res_lambda(e));
+            }
         }
-        Ok(MirExpr::Do(exprs))
+        Ok(())
     }
 
-    pub fn compile_stmt(&mut self, stmt: Stmt, last: bool) -> MirResult {
-        // FIXME last should actually be a tail position check, this makes no sense.
+    pub fn compile_stmt(&mut self, stmt: Stmt) -> CompileResult<Option<MirExpr>> {
         match stmt.data {
-            StmtType::Compound(stmts) => self.compile_all(stmts),
-            // FIXME just skip this instead?
-            StmtType::Decl(_) => Ok(MirExpr::nop()),
+            StmtType::Compound(stmts) => self.compile_all(stmts).map(|_| None),
+            StmtType::Decl(decls) => {
+                for decl in decls {
+                    self.declare_stack(decl.data, decl.location)
+                }
+                Ok(None)
+            },
             StmtType::Return(expr) => {
                 let retval = if let Some(e) = expr {
                     self.compile_expr(e)?.val
                 } else {
                     MirExpr::literal(MirLiteral::Null)
                 };
-                if last {
-                    Ok(retval)
-                } else {
-                    Ok(MirExpr::apply(
-                        MirExpr::Primitive(Primitive::Get(*RETURN_CONT)),
-                        retval,
-                    ))
-                }
+                self.cfg.add_instr(create_res_lambda(retval));
+                self.cfg.set_jump(Jump::Jmp(self.return_block));
+                Ok(None)
             }
-            StmtType::Expr(expr) => Ok(self.compile_expr(expr)?.val),
+            StmtType::Expr(expr) => self.compile_expr(expr)?,
             StmtType::If(condition, body, otherwise) => self.if_stmt(condition, *body, otherwise),
-            _ => todo!(),
+            _ => todo!("statement type not yet supported: {:?}", stmt.data),
         }
     }
 
@@ -66,9 +64,9 @@ impl Compiler {
     ) -> MirResult {
         // TODO do I need to check the ctype here?
         let condition = self.compile_expr(condition)?.val;
-        let consequent = self.compile_stmt(consequent, false)?;
+        let consequent = self.compile_stmt(consequent)?;
         let alternative = if let Some(alt) = alternative {
-            self.compile_stmt(*alt, false)?
+            self.compile_stmt(*alt)?
         } else {
             MirExpr::nop()
         };

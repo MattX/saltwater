@@ -25,14 +25,13 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MirExpr {
-    Let(Box<Let>),
+    Let(Box<Let>), // not letrec
     Lambda(Box<Lambda>),
     If(Box<If>),
     Apply(Box<Apply>),
     Primitive(Primitive),
     Literal(Box<MirLiteral>),
     Ref(MirInternedStr),
-    Do(Vec<MirExpr>),
 }
 
 impl MirExpr {
@@ -105,9 +104,12 @@ pub enum Primitive {
     BoolToInt,
 
     // Higher level primitives -- get rewritten during desugaring
-    Get(MirInternedStr),
-    Set(MirInternedStr),
-    Pure,
+    Get(usize),
+    Set(usize),
+    Pure, // x -> S[x]
+    Lift, // (x -> y) -> S[x] -> S[y]
+    Then,
+    Y,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

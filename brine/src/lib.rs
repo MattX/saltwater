@@ -9,7 +9,7 @@ pub mod miri;
 mod stmt;
 
 use crate::ast::SyntaxNode;
-use crate::mir::{MirExpr, MirInternedStr};
+use crate::mir::{MirExpr, MirInternedStr, Lambda, Primitive};
 use saltwater_parser::get_str;
 use saltwater_parser::hir::{Declaration, Initializer, Stmt, Symbol};
 use saltwater_parser::types::FunctionType;
@@ -19,6 +19,8 @@ use saltwater_parser::{
 };
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use crate::cfg::{Cfg, BlockId, DoLine};
+use crate::expr::Value;
 
 /// Compile and return the declarations and warnings.
 pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
@@ -90,12 +92,15 @@ pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
 struct Compiler {
     pub locals: Vec<Vec<InternedStr>>,
     pub gensym_counter: usize,
+    pub cfg: Cfg,
+    pub current_block: BlockId,
+    pub return_block: BlockId,
+    pub stack_positions: HashMap<MirInternedStr, usize>,
+    pub next_stack_slot: usize,
 }
 
-pub type MirResult = CompileResult<MirExpr>;
-
 lazy_static! {
-    pub static ref RETURN_CONT: MirInternedStr = MirInternedStr::get_or_intern("__return_cont");
+    pub static ref RESULT_NAME: MirInternedStr = MirInternedStr::get_or_intern("_res");
 }
 
 impl Compiler {
@@ -115,8 +120,57 @@ impl Compiler {
         func_type: &FunctionType,
         stmts: Vec<Stmt>,
         location: Location,
-    ) -> MirResult {
-        self.compile_all(stmts);
+    ) -> CompileResult<()> {
+        self.cfg = Cfg::default();
+        self.current_block = self.cfg.add_block();
+        self.return_block = self.cfg.add_block();
+        self.cfg.set_return_block(self.return_block);
+        self.compile_all(stmts)
+    }
+
+    fn declare_stack(
+        &mut self,
+        decl: Declaration,
+        location: Location
+    ) -> CompileResult<()> {
+        let meta = decl.symbol.get();
+        if let StorageClass::Typedef = meta.storage_class {
+            return Ok(());
+        }
+        if let Type::Function(_) = &meta.ctype {
+            todo!("function declaration")
+        }
+        self.declare_stack_slot(meta.id.into());
+        if let Some(init) = decl.init {
+            todo!("stack slot initializer")
+        }
+        Ok(())
+    }
+
+    fn declare_stack_slot(&mut self, identifier: MirInternedStr) -> usize {
+        let slot = self.next_stack_slot;
+        self.next_stack_slot += 1;
+        self.stack_positions.insert(identifier, slot);
+        return slot;
+    }
+
+    fn get_stack(&self, identifier: MirInternedStr) -> CompileResult<usize> {
         todo!()
+    }
+}
+
+pub fn create_res_lambda(e: MirExpr) -> DoLine {
+    DoLine::Transform(Lambda {
+        arg: *RESULT_NAME,
+        body: e,
+    })
+}
+
+pub fn lift(v: Value) -> Value {
+    Value {
+        val: MirExpr::apply(MirExpr::Primitive(Primitive::Pure),
+                            v.val),
+        ctype: v.ctype,
+        pure: false,
     }
 }
