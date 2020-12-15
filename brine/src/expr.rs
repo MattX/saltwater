@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::mir::{MirExpr, MirLiteral, Primitive};
-use crate::{Compiler, MirResult};
+use crate::{Compiler};
 use saltwater_parser::hir::{Expr, ExprType};
 use saltwater_parser::{CompileResult, LiteralValue, Location, Type};
 
@@ -24,30 +24,26 @@ pub struct Value {
 }
 
 impl Compiler {
-    /// This return type is a little hairy, but I'm trying to capture that
-    ///
-    ///  - In most cases, an expression can be converted to a MirExpr. This is when
-    ///    it *doesn't* contain control flow via a comma expression that itself
-    ///    contain control-flow statements
-    ///  - In some cases, an expression does contain complex control flow, at
-    ///    which point we give up and
     pub fn compile_expr(&mut self, expr: Expr) -> CompileResult<Value> {
+        todo!()
+        /*
         let expr = expr.const_fold()?;
         match expr.expr {
             ExprType::Literal(token) => self.compile_literal(expr.ctype, token),
             ExprType::Id(var) => {
                 let md = var.get();
                 Ok(Value {
-                    val: MirExpr::Primitive(Primitive::Get(md.id.into())),
+                    val: MirExpr::Primitive(Primitive::Get(*self.stack_positions.get(&md.id.into()).unwrap())),
                     ctype: md.ctype.clone(),
                     pure: false,
                 })
             }
             _ => todo!("expression type not yet supported: {:?}", expr.expr),
         }
+        */
     }
 
-    fn compile_literal(&mut self, ctype: Type, token: LiteralValue) -> ExprResult {
+    fn compile_literal(&mut self, ctype: Type, token: LiteralValue) -> CompileResult<Value> {
         let val = match (token, &ctype) {
             (LiteralValue::Int(i), Type::Bool) => MirExpr::literal(MirLiteral::Bool(i != 0)),
             (LiteralValue::Int(i), _) => MirExpr::literal(MirLiteral::Int(i)),

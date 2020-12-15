@@ -21,39 +21,12 @@
 //! Each basic block has exactly one (implicit) parameter, just like each line
 //! in a do-block has one implicit parameter, the previous result.
 
-use crate::mir::{MirExpr, Lambda};
+use crate::mir::{MirExpr, Lambda, MirInternedStr, Primitive, MirLiteral};
 
 #[derive(Debug, Clone, Default)]
 pub struct BasicBlock {
-    instrs: Vec<DoLine>,
+    instr: Option<Lambda>,
     jump: Option<Jump>,
-}
-
-/// This is a sequence of state monad actions, but where only the most
-/// recent result is ever accessible.
-///
-/// In descriptions below, `S[_]` is `State[Stack, _]`, where `Stack`
-/// is the reified stack state.
-// TODO I've thought about this a little more, and I'm pretty sure we
-//      can get away with each block having only exactly one Transform
-//      as instructions. I mean obviously it's theoretically possible
-//      but I think in this case it would Just Work™.
-#[derive(Debug, Clone)]
-pub enum DoLine {
-    /// Most general case: the expression is of type `A -> S[B]`.
-    Transform(Lambda),
-    /// Type `S[B]`
-    Action(MirExpr),
-    /// Type `A -> B`
-    Map(Lambda),
-    /// Type `B`
-    Pure(MirExpr),
-}
-
-impl DoLine {
-    fn to_mir_expr(&self) -> MirExpr {
-        todo!()
-    }
 }
 
 pub type BlockId = usize;
@@ -75,14 +48,20 @@ pub struct Cfg {
     current_block: BlockId,
 }
 
+lazy_static! {
+    static ref NEXT_BLOCK: MirInternedStr = MirInternedStr::get_or_intern("next_block");
+    static ref DISCRIMINANT: MirInternedStr = MirInternedStr::get_or_intern("discriminant");
+}
+
 impl Cfg {
     pub fn add_block(&mut self) -> BlockId {
-        self.blocks.push(BasicBlock { instrs: vec![], jump: None });
+        self.blocks.push(BasicBlock::default());
         self.blocks.len() - 1
     }
 
-    pub fn add_instr(&mut self, instr: DoLine) {
-        self.blocks[self.current_block].instrs.push(instr);
+    pub fn add_instr(&mut self, instr: Lambda) {
+        let old = self.blocks[self.current_block].instr.replace(instr);
+        debug_assert!(old.is_none());
     }
 
     pub fn set_jump(&mut self, jump: Jump) {
@@ -98,6 +77,10 @@ impl Cfg {
     pub fn switch_to_block(&mut self, id: BlockId) {
         self.current_block = id;
     }
+
+    pub fn to_mir(&self) -> MirExpr {
+        todo!()
+    }
 }
 
 impl Default for Cfg {
@@ -108,4 +91,28 @@ impl Default for Cfg {
             current_block: 0,
         }
     }
+}
+
+
+/// Generates a switch statement, such that when discriminant is
+/// `n`, the `n`th expression in `exprs` will be selected.
+///
+/// If the discriminant is not within `0..exprs.len()` at runtime,
+/// behavior is undefined.
+fn switch(discriminant: MirExpr, mut exprs: Vec<MirExpr>) -> MirExpr {
+    MirExpr::let_(*DISCRIMINANT, discriminant, switch_helper(0, exprs))
+}
+
+fn switch_helper(current_pos: i64, mut exprs: Vec<MirExpr>) -> MirExpr {
+    let expr = exprs.pop().expect("switch given empty exprs");
+    if exprs.is_empty() {
+        expr
+    } else {
+        let discriminant = MirExpr::Ref(*DISCRIMINANT);
+        MirExpr::if_(eq_expr(current_pos, discriminant), expr, switch_helper(current_pos + 1, exprs))
+    }
+}
+
+fn eq_expr(n: i64, e: MirExpr) -> MirExpr {
+    MirExpr::apply(MirExpr::apply(MirExpr::Primitive(Primitive::Eq), MirExpr::literal(MirLiteral::Int(n))), e)
 }

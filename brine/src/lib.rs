@@ -19,7 +19,7 @@ use saltwater_parser::{
 };
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use crate::cfg::{Cfg, BlockId, DoLine};
+use crate::cfg::{Cfg, BlockId};
 use crate::expr::Value;
 
 /// Compile and return the declarations and warnings.
@@ -52,7 +52,7 @@ pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
                     match compiler.compile_func(decl.data.symbol, &func_type, stmts, decl.location)
                     {
                         Ok(expr) => {
-                            func_code.insert(decl.data.symbol.get().id, expr);
+                            func_code.insert(decl.data.symbol.get().id, compiler.cfg.to_mir());
                             Ok(())
                         }
                         Err(e) => Err(e),
@@ -125,7 +125,7 @@ impl Compiler {
         self.current_block = self.cfg.add_block();
         self.return_block = self.cfg.add_block();
         self.cfg.set_return_block(self.return_block);
-        self.compile_all(stmts)
+        self.compile_all(todo!(), stmts).map(|_| ())
     }
 
     fn declare_stack(
@@ -159,11 +159,11 @@ impl Compiler {
     }
 }
 
-pub fn create_res_lambda(e: MirExpr) -> DoLine {
-    DoLine::Transform(Lambda {
+pub fn create_res_lambda(e: MirExpr) -> Lambda {
+    Lambda {
         arg: *RESULT_NAME,
         body: e,
-    })
+    }
 }
 
 pub fn lift(v: Value) -> Value {

@@ -14,31 +14,31 @@
 
 use crate::ast::SyntaxNode;
 use crate::mir::{MirExpr, MirLiteral, Primitive};
-use crate::{RETURN_CONT, create_res_lambda};
-use crate::{Compiler, MirResult};
+use crate::{create_res_lambda};
+use crate::{Compiler};
 use saltwater_parser::data::hir::StmtType;
 use saltwater_parser::hir::{Expr, Stmt};
 use saltwater_parser::CompileResult;
-use crate::cfg::{Jump, DoLine};
+use crate::cfg::{Jump};
+use crate::expr::Value;
 
 impl Compiler {
-    pub fn compile_all(&mut self, stmts: Vec<Stmt>) -> CompileResult<()> {
+    pub fn compile_all(&mut self, prev: Value, stmts: Vec<Stmt>) -> CompileResult<Value> {
+        let mut v = prev;
         for stmt in stmts {
-            if let Some(e) = self.compile_stmt(stmt)? {
-                self.cfg.add_instr(create_res_lambda(e));
-            }
+            v = self.compile_stmt(v, stmt)?;
         }
-        Ok(())
+        Ok(todo!())
     }
 
-    pub fn compile_stmt(&mut self, stmt: Stmt) -> CompileResult<Option<MirExpr>> {
+    pub fn compile_stmt(&mut self, prev: Value, stmt: Stmt) -> CompileResult<Value> {
         match stmt.data {
-            StmtType::Compound(stmts) => self.compile_all(stmts).map(|_| None),
+            StmtType::Compound(stmts) => self.compile_all(prev, stmts),
             StmtType::Decl(decls) => {
                 for decl in decls {
-                    self.declare_stack(decl.data, decl.location)
+                    self.declare_stack(decl.data, decl.location);
                 }
-                Ok(None)
+                Ok(prev)
             },
             StmtType::Return(expr) => {
                 let retval = if let Some(e) = expr {
@@ -48,14 +48,15 @@ impl Compiler {
                 };
                 self.cfg.add_instr(create_res_lambda(retval));
                 self.cfg.set_jump(Jump::Jmp(self.return_block));
-                Ok(None)
+                Ok(prev)
             }
-            StmtType::Expr(expr) => self.compile_expr(expr)?,
-            StmtType::If(condition, body, otherwise) => self.if_stmt(condition, *body, otherwise),
+            StmtType::Expr(expr) => self.compile_expr(expr),
+            //StmtType::If(condition, body, otherwise) => self.if_stmt(condition, *body, otherwise),
             _ => todo!("statement type not yet supported: {:?}", stmt.data),
         }
     }
 
+    /*
     fn if_stmt(
         &mut self,
         condition: Expr,
@@ -72,4 +73,5 @@ impl Compiler {
         };
         Ok(MirExpr::if_(condition, consequent, alternative))
     }
+    */
 }

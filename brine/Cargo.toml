@@ -8,8 +8,10 @@ edition = "2018"
 
 [dependencies]
 clap = "2.33"
+itertools = "0.9"
 lasso = "0.2"
 lazy_static = "1"
+lexpr = "0.2"
 log = "0.4"
 rustyline = "7.0"
 saltwater-parser = { path = "../saltwater-parser", features = ["codegen"] }
