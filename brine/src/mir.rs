@@ -16,15 +16,15 @@
 //! Describes a purely-functional language higher-level than Relambda, serving as an intermediate
 //! compilation step.
 
+use itertools::Itertools;
+use lexpr::{Number, Value};
 use saltwater_parser::get_str;
 use saltwater_parser::InternedStr;
 use serde::de::Visitor;
 use serde::export::Formatter;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use lexpr::{Value, Number};
-use std::convert::TryFrom;
 use serde_lexpr::{from_str, to_string};
-use itertools::Itertools;
+use std::convert::TryFrom;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -74,6 +74,7 @@ impl MirExpr {
     /// Desugar MIR
     ///  - Let into lambda
     ///  - High-level primitives into low-level primitives
+    // TODO should probably consume original instead of taking a ref
     pub fn desugar(&self) -> MirExpr {
         match self {
             MirExpr::Let(let_) => {
@@ -83,9 +84,47 @@ impl MirExpr {
                     value.desugar(),
                 )
             }
-            _ => self.clone(),
+            MirExpr::Primitive(Primitive::Y) => Y_CODE.clone(),
+            MirExpr::Primitive(Primitive::Pure) => todo!(),
+            MirExpr::Primitive(Primitive::Lift) => todo!(),
+            MirExpr::Primitive(Primitive::Then) => todo!(),
+            MirExpr::Primitive(Primitive::Get(_)) => todo!(),
+            MirExpr::Primitive(Primitive::Set(_)) => todo!(),
+            MirExpr::Primitive(_) | MirExpr::Literal(_) | MirExpr::Ref(_) => self.clone(),
+            MirExpr::Lambda(l) => {
+                let Lambda { arg, body } = &**l;
+                MirExpr::lambda(*arg, body.desugar())
+            }
+            MirExpr::If(if_) => {
+                let If {
+                    condition,
+                    consequent,
+                    alternative,
+                } = &**if_;
+                MirExpr::if_(
+                    condition.desugar(),
+                    consequent.desugar(),
+                    alternative.desugar(),
+                )
+            }
+            MirExpr::Apply(ap) => {
+                let Apply { func, arg } = &**ap;
+                MirExpr::apply(func.desugar(), arg.desugar())
+            }
+            MirExpr::Comment(cmt, body) => MirExpr::Comment(cmt.clone(), Box::new(body.desugar())),
         }
     }
+}
+
+lazy_static! {
+    static ref Y_CODE: MirExpr = parse_mir(
+        "\
+    (#:lambda (f)\
+     ((#:lambda (g) (g g))\
+      (#:lambda (g) (f (#:lambda (x) ((g g) x))))))\
+    "
+    )
+    .unwrap();
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -247,23 +286,22 @@ pub fn lexpr_to_mir(v: lexpr::Value) -> Result<MirExpr, String> {
     Ok(match v {
         Value::Null => MirExpr::literal(MirLiteral::Null),
         Value::Bool(b) => MirExpr::literal(MirLiteral::Bool(b)),
-        Value::Number(n) => if let Some(i) = n.as_i64() {
-            MirExpr::literal(MirLiteral::Int(i))
-        } else {
-            return Err(format!("number not supported: {}", n));
-        }
-        Value::Symbol(s) => {
-            match from_str::<Primitive>(&s) {
-                Ok(p) => MirExpr::Primitive(p),
-                Err(_) => MirExpr::Ref(MirInternedStr::get_or_intern(s)),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                MirExpr::literal(MirLiteral::Int(i))
+            } else {
+                return Err(format!("number not supported: {}", n));
             }
+        }
+        Value::Symbol(s) => match from_str::<Primitive>(&s) {
+            Ok(p) => MirExpr::Primitive(p),
+            Err(_) => MirExpr::Ref(MirInternedStr::get_or_intern(s)),
         },
         Value::Cons(c) => cons_to_mir(c)?,
         Value::Keyword(k) => return Err(format!("keyword at toplevel: {:?}", k)),
-        Value::Vector(_) | Value::Bytes(_)
-        | Value::Char(_)
-        | Value::Nil | Value::String(_)
-        => return Err(format!("found unsupported object {:?}", v))
+        Value::Vector(_) | Value::Bytes(_) | Value::Char(_) | Value::Nil | Value::String(_) => {
+            return Err(format!("found unsupported object {:?}", v))
+        }
     })
 }
 
@@ -294,37 +332,63 @@ fn parse_kw(kw: &str, mut elems: Vec<lexpr::Value>) -> Result<MirExpr, String> {
     Ok(match kw {
         "let" => {
             if elems.len() != 2 {
-                return Err(format!("let must have exactly two arguments, found {:?}", elems));
+                return Err(format!(
+                    "let must have exactly two arguments, found {:?}",
+                    elems
+                ));
             }
             let body = lexpr_to_mir(elems.pop().unwrap())?;
             let mut bind = match elems.pop().unwrap() {
                 Value::Cons(s) => into_vec_proper(s)?,
-                e => return Err(format!("let first argument must be a pair, not {:?}", e)),
+                e => return Err(format!("let first argument must be a list, not {:?}", e)),
             };
             if bind.len() != 2 {
-                return Err(format!("let binding must have exactly two elements, found {:?}", bind));
+                return Err(format!(
+                    "let binding must have exactly two elements, found {:?}",
+                    bind
+                ));
             }
             let val = lexpr_to_mir(bind.pop().unwrap())?;
             let ident = match bind.pop().unwrap() {
                 Value::Symbol(s) => MirInternedStr::get_or_intern(s),
-                e => return Err(format!("lambda first argument must be a symbol, not {:?}", e)),
+                e => {
+                    return Err(format!(
+                        "lambda first argument must be a symbol, not {:?}",
+                        e
+                    ))
+                }
             };
             MirExpr::let_(ident, val, body)
         }
         "lambda" => {
             if elems.len() != 2 {
-                return Err(format!("lambda must have exactly two arguments, found {:?}", elems));
+                return Err(format!(
+                    "lambda must have exactly two arguments, found {:?}",
+                    elems
+                ));
             }
             let body = lexpr_to_mir(elems.pop().unwrap())?;
-            let ident = match elems.pop().unwrap() {
-                Value::Symbol(s) => MirInternedStr::get_or_intern(s),
-                e => return Err(format!("lambda first argument must be a symbol, not {:?}", e)),
+            let formals = match elems.pop().unwrap() {
+                Value::Cons(s) => into_vec_proper(s)?,
+                e => return Err(format!("lambda first argument must be a list, not {:?}", e)),
             };
-            MirExpr::lambda(ident, body)
+            let mut formal_symbols = Vec::new();
+            for formal in formals {
+                match formal {
+                    Value::Symbol(s) => formal_symbols.push(MirInternedStr::get_or_intern(s)),
+                    _ => return Err(format!("lambda formals must be symbols, not {:?}", formal)),
+                }
+            }
+            formal_symbols
+                .into_iter()
+                .rfold(body, |inner, ext_formal| MirExpr::lambda(ext_formal, inner))
         }
         "if" => {
             if elems.len() != 3 {
-                return Err(format!("if must have exactly three arguments, found {:?}", elems));
+                return Err(format!(
+                    "if must have exactly three arguments, found {:?}",
+                    elems
+                ));
             }
             let alternate = lexpr_to_mir(elems.pop().unwrap())?;
             let consequent = lexpr_to_mir(elems.pop().unwrap())?;
@@ -333,12 +397,20 @@ fn parse_kw(kw: &str, mut elems: Vec<lexpr::Value>) -> Result<MirExpr, String> {
         }
         "comment" => {
             if elems.len() != 2 {
-                return Err(format!("comment must have exactly one argument, found {:?}", elems));
+                return Err(format!(
+                    "comment must have exactly one argument, found {:?}",
+                    elems
+                ));
             }
             let body = lexpr_to_mir(elems.pop().unwrap())?;
             let comment = match elems.pop().unwrap() {
                 Value::String(s) => s.to_string(),
-                e => return Err(format!("comment first argument must be a string, not {:?}", e)),
+                e => {
+                    return Err(format!(
+                        "comment first argument must be a string, not {:?}",
+                        e
+                    ))
+                }
             };
             MirExpr::Comment(comment, Box::new(body))
         }
@@ -348,45 +420,40 @@ fn parse_kw(kw: &str, mut elems: Vec<lexpr::Value>) -> Result<MirExpr, String> {
 
 pub fn mir_to_lexpr(expr: &MirExpr) -> lexpr::Value {
     match expr {
-        MirExpr::Let(l) => {
+        MirExpr::Let(l) => Value::list(vec![
+            Value::keyword("let".to_string()),
             Value::list(vec![
-                Value::keyword("let".to_string()),
-                Value::list(vec![Value::symbol(l.ident.to_string()), mir_to_lexpr(&l.value)]),
-                mir_to_lexpr(&l.body),
-            ])
-        }
-        MirExpr::Lambda(l) => {
-            Value::list(vec![
-                Value::keyword("lambda".to_string()),
-                Value::symbol(l.arg.to_string()),
-                mir_to_lexpr(&l.body),
-            ])
-        }
-        MirExpr::If(if_) => {
-            Value::list(vec![
-                Value::keyword("if".to_string()),
-                mir_to_lexpr(&if_.condition),
-                mir_to_lexpr(&if_.consequent),
-                mir_to_lexpr(&if_.alternative),
-            ])
-        }
-        MirExpr::Apply(ap) => {
-            Value::list(vec![
-                mir_to_lexpr(&ap.func),
-                mir_to_lexpr(&ap.arg),
-            ])
-        }
+                Value::symbol(l.ident.to_string()),
+                mir_to_lexpr(&l.value),
+            ]),
+            mir_to_lexpr(&l.body),
+        ]),
+        MirExpr::Lambda(l) => Value::list(vec![
+            Value::keyword("lambda".to_string()),
+            Value::symbol(l.arg.to_string()),
+            mir_to_lexpr(&l.body),
+        ]),
+        MirExpr::If(if_) => Value::list(vec![
+            Value::keyword("if".to_string()),
+            mir_to_lexpr(&if_.condition),
+            mir_to_lexpr(&if_.consequent),
+            mir_to_lexpr(&if_.alternative),
+        ]),
+        MirExpr::Apply(ap) => Value::list(vec![mir_to_lexpr(&ap.func), mir_to_lexpr(&ap.arg)]),
         MirExpr::Primitive(p) => Value::symbol(to_string(p).unwrap()),
         MirExpr::Literal(b) => match &**b {
             MirLiteral::Null => Value::Null,
             MirLiteral::Int(i) => Value::Number(Number::from(*i)),
             MirLiteral::Bool(b) => Value::Bool(*b),
-        }
+        },
         MirExpr::Ref(r) => Value::symbol(r.to_string()),
-        MirExpr::Comment(comment, body) => Value::list(vec![
-            Value::string(comment.clone()),
-            mir_to_lexpr(body),
-        ])
+        MirExpr::Comment(comment, body) => {
+            Value::list(vec![Value::string(comment.clone()), mir_to_lexpr(body)])
+        }
     }
 }
 
+/// Convenience function to parse a string to an S-Expr, then to MIR
+pub fn parse_mir(s: &str) -> Result<MirExpr, String> {
+    lexpr_to_mir(lexpr::from_str(s).map_err(|e| format!("syntax error: {:?}", e))?)
+}

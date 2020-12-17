@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use crate::ast::SyntaxNode;
+use crate::cfg::Jump;
+use crate::create_res_lambda;
+use crate::expr::Value;
 use crate::mir::{MirExpr, MirLiteral, Primitive};
-use crate::{create_res_lambda};
-use crate::{Compiler};
+use crate::Compiler;
 use saltwater_parser::data::hir::StmtType;
 use saltwater_parser::hir::{Expr, Stmt};
 use saltwater_parser::CompileResult;
-use crate::cfg::{Jump};
-use crate::expr::Value;
 
 impl Compiler {
     pub fn compile_all(&mut self, prev: Value, stmts: Vec<Stmt>) -> CompileResult<Value> {
@@ -39,7 +39,7 @@ impl Compiler {
                     self.declare_stack(decl.data, decl.location);
                 }
                 Ok(prev)
-            },
+            }
             StmtType::Return(expr) => {
                 let retval = if let Some(e) = expr {
                     self.compile_expr(e)?.val

@@ -15,6 +15,7 @@
 //! ## Miri -- an explicit-CPS interpreter for MIR
 
 use crate::mir::{Apply, If, MirExpr, MirInternedStr, MirLiteral, Primitive};
+use itertools::Itertools;
 use saltwater_parser::InternedStr;
 use std::rc::Rc;
 
@@ -27,6 +28,18 @@ pub enum Obj<'a> {
     Lambda(Box<Lambda<'a>>),
     CurriedPrimitive(CurriedPrimitive<'a>),
     Cons(Rc<Obj<'a>>, Rc<Obj<'a>>),
+}
+
+impl<'a> PartialEq for Obj<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Obj::Bool(a), Obj::Bool(b)) => a == b,
+            (Obj::Int(a), Obj::Int(b)) => a == b,
+            (Obj::Null, Obj::Null) => true,
+            (Obj::Cons(a_car, a_cdr), Obj::Cons(b_car, b_cdr)) => a_car == b_car && a_cdr == b_cdr,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +82,17 @@ struct Environment<'a> {
     bindings: Vec<(MirInternedStr, Rc<Obj<'a>>)>,
 }
 
+impl<'a> Environment<'a> {
+    fn show_bindings(&self) -> String {
+        let parent_binding = match &self.parent {
+            Some(p) => format!("{} → ", p.show_bindings()),
+            None => "".to_string(),
+        };
+        let self_bindings = self.bindings.iter().map(|(s, o)| s).join(", ");
+        format!("{}[{}]", parent_binding, self_bindings)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RcEnv<'a>(Rc<Environment<'a>>);
 
@@ -88,6 +112,10 @@ impl<'a> RcEnv<'a> {
             parent: Some(RcEnv(self.0.clone())),
             bindings: vec![(name, value)],
         }))
+    }
+
+    fn show_bindings(&self) -> String {
+        self.0.show_bindings()
     }
 }
 
@@ -130,7 +158,7 @@ pub fn run(expr: &MirExpr) -> Result<Obj, String> {
             }
             Continuation::Apply { func, environment } => match &*func.clone() {
                 Obj::Lambda(l) => {
-                    let new_env = environment.with_value(l.arg, value.clone());
+                    let new_env = l.env.clone().with_value(l.arg, value.clone());
                     stack.push(Continuation::Eval {
                         expr: l.body,
                         environment: new_env,
@@ -202,7 +230,11 @@ fn eval<'a, 'b>(
             if let Some(v) = environment.find_value(*name).clone() {
                 *value = v;
             } else {
-                return Err(format!("reference to undefined name {}", name));
+                return Err(format!(
+                    "reference to undefined name {} in {:?}",
+                    name,
+                    environment.show_bindings()
+                ));
             }
         }
         _ => unimplemented!("found {:?}, which should be gone after desugaring", expr),
@@ -320,4 +352,27 @@ fn apply_primitive<'a>(
         p => panic!("got primitive {:?}, which should have been desugared", p),
     };
     Ok(Rc::new(val))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{run, Obj};
+    use crate::mir::{mir_to_lexpr, parse_mir};
+
+    #[test]
+    fn fib() {
+        assert_eq!(
+            run(&parse_mir(
+                "\
+       (#:let (fac_ (#:lambda (f_ n)
+              (#:if (eq n 1) 1 (times n (f_ (minus n 1))))))
+       ((y fac_) 5))
+        "
+            )
+            .unwrap()
+            .desugar())
+            .unwrap(),
+            Obj::Int(120)
+        );
+    }
 }

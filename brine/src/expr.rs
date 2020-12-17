@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::mir::{MirExpr, MirLiteral, Primitive};
-use crate::{Compiler};
+use crate::Compiler;
 use saltwater_parser::hir::{Expr, ExprType};
 use saltwater_parser::{CompileResult, LiteralValue, Location, Type};
 
@@ -50,6 +50,10 @@ impl Compiler {
             (LiteralValue::Char(i), _) => MirExpr::literal(MirLiteral::Int(i64::from(i))),
             _ => unimplemented!("only ints and bools are supported"),
         };
-        Ok(Value { val, ctype, pure: true })
+        Ok(Value {
+            val,
+            ctype,
+            pure: true,
+        })
     }
 }

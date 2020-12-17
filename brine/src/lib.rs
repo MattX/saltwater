@@ -9,7 +9,9 @@ pub mod miri;
 mod stmt;
 
 use crate::ast::SyntaxNode;
-use crate::mir::{MirExpr, MirInternedStr, Lambda, Primitive};
+use crate::cfg::{BlockId, Cfg};
+use crate::expr::Value;
+use crate::mir::{Lambda, MirExpr, MirInternedStr, Primitive};
 use saltwater_parser::get_str;
 use saltwater_parser::hir::{Declaration, Initializer, Stmt, Symbol};
 use saltwater_parser::types::FunctionType;
@@ -19,8 +21,6 @@ use saltwater_parser::{
 };
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use crate::cfg::{Cfg, BlockId};
-use crate::expr::Value;
 
 /// Compile and return the declarations and warnings.
 pub fn compile(buf: &str, opt: Opt) -> Program<MirExpr> {
@@ -128,11 +128,7 @@ impl Compiler {
         self.compile_all(todo!(), stmts).map(|_| ())
     }
 
-    fn declare_stack(
-        &mut self,
-        decl: Declaration,
-        location: Location
-    ) -> CompileResult<()> {
+    fn declare_stack(&mut self, decl: Declaration, location: Location) -> CompileResult<()> {
         let meta = decl.symbol.get();
         if let StorageClass::Typedef = meta.storage_class {
             return Ok(());
@@ -168,8 +164,7 @@ pub fn create_res_lambda(e: MirExpr) -> Lambda {
 
 pub fn lift(v: Value) -> Value {
     Value {
-        val: MirExpr::apply(MirExpr::Primitive(Primitive::Pure),
-                            v.val),
+        val: MirExpr::apply(MirExpr::Primitive(Primitive::Pure), v.val),
         ctype: v.ctype,
         pure: false,
     }

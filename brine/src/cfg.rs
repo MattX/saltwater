@@ -21,7 +21,7 @@
 //! Each basic block has exactly one (implicit) parameter, just like each line
 //! in a do-block has one implicit parameter, the previous result.
 
-use crate::mir::{MirExpr, Lambda, MirInternedStr, Primitive, MirLiteral};
+use crate::mir::{Lambda, MirExpr, MirInternedStr, MirLiteral, Primitive};
 
 #[derive(Debug, Clone, Default)]
 pub struct BasicBlock {
@@ -93,7 +93,6 @@ impl Default for Cfg {
     }
 }
 
-
 /// Generates a switch statement, such that when discriminant is
 /// `n`, the `n`th expression in `exprs` will be selected.
 ///
@@ -109,10 +108,20 @@ fn switch_helper(current_pos: i64, mut exprs: Vec<MirExpr>) -> MirExpr {
         expr
     } else {
         let discriminant = MirExpr::Ref(*DISCRIMINANT);
-        MirExpr::if_(eq_expr(current_pos, discriminant), expr, switch_helper(current_pos + 1, exprs))
+        MirExpr::if_(
+            eq_expr(current_pos, discriminant),
+            expr,
+            switch_helper(current_pos + 1, exprs),
+        )
     }
 }
 
 fn eq_expr(n: i64, e: MirExpr) -> MirExpr {
-    MirExpr::apply(MirExpr::apply(MirExpr::Primitive(Primitive::Eq), MirExpr::literal(MirLiteral::Int(n))), e)
+    MirExpr::apply(
+        MirExpr::apply(
+            MirExpr::Primitive(Primitive::Eq),
+            MirExpr::literal(MirLiteral::Int(n)),
+        ),
+        e,
+    )
 }
